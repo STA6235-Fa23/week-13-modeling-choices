@@ -1,0 +1,311 @@
+---
+title: "Choosing an Underlying Distribution"
+subtitle: "STA6235: Modeling in Regression"
+execute:
+  echo: true
+  warning: false
+  message: false
+  error: true
+format: 
+  revealjs:
+    theme: uwf2
+    embed-resources: true
+    slide-number: false
+    width: 1600
+    height: 900
+    df-print: paged
+    html-math-method: katex
+title-slide-attributes:
+    data-background-image: /Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/title.png
+    data-background-size: contain 
+editor: source
+pdf-separate-fragments: true
+fig-align: center
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(palmerpenguins)
+library(tidymodels)
+library(boot)
+data <- palmerpenguins::penguins %>% na.omit()
+```
+
+## Introduction {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+- As a professional statistician, how do I know what modeling technique is appropriate?
+
+    - It all depends on the outcome.
+    
+- I keep a "road map" in my mind:
+
+    - Continuous? Try normal first. Maybe gamma if skewed.
+    
+    - Categorical? One of the logistics.
+    
+    - Count? Poisson or negative binomial.
+    
+- Note that we have not talked about *all* modeling techniques.
+
+    - Hurdle models.
+    
+    - Cox proportional hazards model.
+    
+    - Models for time series data.
+    
+    - Models for spatially correlated data.
+    
+    - Models for correlated data.
+    
+## Introduction {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+- It helps when we "look" at the data. 
+
+- Continuous data does not always lend itself to the normal distribution. 
+
+    - Sometimes it needs a transformation. 
+    
+    - We can do a preliminary check on the outcome (*y*) to determine shape of distribution, but remember that the assumptions with normal distribution is on the residuals - so we need to check those assumptions on the backend as well.
+  
+- Categorical data needs to be explored to make sure that there is not sparseness in a category. 
+
+    - We also need to determine if it makes sense to try ordinal logistic regression or stick with nominal logistic regression in the case of non-binary categorical data.
+  
+- Count data needs to be explored to verify that it is a count, determine if we should use either Poisson or negative binomial, and determine if we should consider a zero-inflated model. 
+
+## Introduction {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+Recall that we have been working with the Jackson Heart data,
+
+```{r}
+#| warning: false
+#| message: false
+library(tidyverse)
+library(haven)
+data <- read_sas("/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/STA6257/datasets/analysis1.sas7bdat") 
+head(data)
+```
+
+## Example: Systolic Blood Pressure {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+- Systolic and diastolic blood pressures are "known" to have normal distributions, however, it is still important for us to check.
+
+- If I think that a variable may be continuous, I will first look at a histogram of it to see what its shape is. 
+
+    - Note that the histogram will also allow us to identify any obvious outliers 
+    
+        - e.g., sometimes folks code missing values as 777, 888, or 999 -- sometimes they use 999 for general missing, other times the different large numbers are used to indicate what type of missingness (refused to answer, couldn't remember, or was left blank).
+
+## Example: Systolic Blood Pressure {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+<center>
+```{r}
+hist(data$sbp)
+```
+</center>
+
+- There is slight skew to systolic blood pressure.
+
+- We can also see that there are no "weird" values in the dataset.
+
+## Example: Systolic Blood Pressure {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+- Suppose we create a basic model (for example purposes),
+
+```{r}
+m1 <- lm(sbp ~ age + sex + age:sex, data = data)
+summary(m1)
+```
+
+## Example: Systolic Blood Pressure {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+- Let's now check the model assumptions. 
+
+- Remember, when using the normal distribution, we assume that the *residuals* have a normal distribution with mean 0 and common variance. 
+
+- We check this with the `anova_check()` function.
+
+```{r}
+#| eval: false
+library(classpackage)
+anova_check(m)
+```
+
+## Example: Systolic Blood Pressure {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+- In our example,
+
+<center>
+```{r}
+library(classpackage)
+anova_check(m1)
+```
+</center>
+
+## Example: Diabetic Status {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+- Let us consider diabetic status (*Diabetes*; 0=non-diabetic, 1=diabetic). 
+
+- In this case, it is a yes/no response, so I know that binary logistic regression is appropriate.
+
+- However, when working with categorical data, I look at frequency tables. 
+
+- If I need a quick look at frequencies, I use the `count()` function:
+
+```{r}
+#| eval: false
+data %>% count(variable)
+data %>% count(variable1, variable2, ...)
+```
+
+## Example: Diabetic Status {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+- In our example,
+
+```{r}
+data %>% count(Diabetes)
+```
+
+## Example: Diabetic Status {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+- What about the three level categorization of diabetic status (*diab3cat*; 0=non-diabetic, 1=pre-diabetic, 2=diabetic)? 
+- Using the same method as before, we will confirm the categories and eyeball sample sizes. 
+
+    - Sometimes there are too few observations in a category and we have to decide to either exclude them from analysis or combine them with another category (if that makes practical sense).
+    
+```{r}
+data %>% count(diab3cat)
+```   
+
+## Example: Diabetic Status {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+- We see that there are 3 levels of *diab3cat* and from the description, that 0=non-diabetic, 1=pre-diabetic, 2=diabetic.
+
+- There is a "linear" progression from non-diabetic to pre-diabetic to diabetic... ordinal logistic should be considered.
+
+- The Brant test can be used to determine if ordinal logistic regression is valid.
+
+- Remember that if ordinal logistic regression is not valid, we can step back and perform nominal logistic regression.
+
+## Example: Number of Risk Factors {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+- Here, we had to do some data management. 
+
+::: {.panel-tabset}
+
+## Instructions
+
+- You were asked to create a variable that counts the number of controllable risk factors for stroke: 
+
+    - blood pressure (*idealHealthBP*; 1=ideal health, 0=not ideal health), 
+    - smoking status (*idealHealthSMK*; 1=ideal health, 0=not ideal health), 
+    - diabetes (*idealHealthDM*; 1=ideal health, 0=not ideal health), 
+    - diet  (*idealHealthNutrition*; 1=ideal health, 0=not ideal health), 
+    - physical activity (*idealHealthPA*; 1=ideal health, 0=not ideal health), 
+    - obesity  (*idealHealthBMI*; 1=ideal health, 0=not ideal health), and 
+    - high cholesterol  (*idealHealthChol*; 1=ideal health, 0=not ideal health).
+
+## Code
+
+```{r}
+data <- data %>%
+  mutate(LSS = 7 - 
+           idealHealthBP - 
+           idealHealthSMK - 
+           idealHealthDM - 
+           idealHealthNutrition - 
+           idealHealthPA - 
+           idealHealthBMI - 
+           idealHealthChol)
+```
+
+## Check
+
+```{r}
+data %>% count(LSS)
+```
+
+:::
+
+## Example: Number of Risk Factors {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+- With count data, we also need to consider zero-inflation. 
+
+- We can see from the frequency chart that we do not have any 0 values at all, so that is not a concern. 
+
+- However, suppose we do have 0 values, then we can look at a histogram to see if there's a spike:
+
+::: {.panel-tabset}
+
+## Code 
+
+```{r}
+#| eval: false
+data %>% ggplot(aes(x = LSS)) +
+  geom_bar() +
+  theme_bw() +
+  labs(x = "Number of Controllable Risk Factors", 
+       y = "Number of Participants")
+```
+
+## Graph
+
+<center>
+```{r}
+#| warning: false
+data %>% ggplot(aes(x = LSS)) +
+  geom_bar() +
+  theme_bw() +
+  labs(x = "Number of Controllable Risk Factors", 
+       y = "Number of Participants")
+```
+</center>
+
+:::
+
+## Example: Number of Risk Factors {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+- We also want to decide between Poisson and negative binomial.
+
+- Remember that the assumption of Poisson is that the mean equals the variance. That's easy to check!
+
+```{r}
+mean(data$LSS)
+var(data$LSS)
+```
+
+- Poisson will be fine here but we can use negative binomial if we want to.
+
+    - Remember: I tend to just skip straight to negative binomial. :)
+    
+## Conclusion {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+- We are going to practice determining what distribution is necessary. Remember that we have only learned the following models:
+
+    - Normal (remember to check assumptions on residuals)
+    - Gamma
+    - Binary logistic
+    - Ordinal logistic (remember to check for proportional odds)
+    - Nominal logistic 
+    - Poisson (remember to check $\bar{x} \approx s^2$; remember to check for zero-inflation)
+    - Negative binomial (remember to check for zero-inflation)
+
+## Conclusion {background-image="/Users/sseals/Library/CloudStorage/GoogleDrive-sseals@uwf.edu/My Drive/00 - Personal/R/quarto themes/slide.png" background-size="contain"} 
+
+- I often say that I spend more time doing data management and investigation than I do actually analyzing the data. 
+
+- I also say that statisticians/data scientists are often more detectives than anything. 
+
+    - While generally I don't need to know the science behind the things I'm analyzing, the better I understand basic concepts about the data, the better my modeling strategy becomes. 
+
+- Do not be afraid to ask questions of those that are giving you data or are responsible for data creation/collection. 
+
+    - In the best scenarios, there will be data dictionaries available. 
+    
+    - In the worst scenarios, there will be no answers to your questions. 
+    
+    - In all scenarios, you just do the best with what you have and keep notes / report on whatever assumptions are being made on the data for modeling purposes.
+    
+    
+    
+    
